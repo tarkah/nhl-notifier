@@ -1,11 +1,13 @@
-use crate::model::{Response, ResponseType, Schedule, Team};
+use crate::model::{
+    GameContentResponse, GameLinescoreResponse, Response, ResponseType, Schedule, Team,
+};
 use failure::{bail, format_err, Error, ResultExt};
 use futures::AsyncReadExt;
 use http::{Request, Uri};
 use http_client::{native::NativeClient, Body, HttpClient};
 use std::collections::HashMap;
 
-const BASE_URL: &str = "http://statsapi.web.nhl.com/api/v1";
+const BASE_URL: &str = "https://statsapi.web.nhl.com/api/v1";
 
 pub struct Client {
     client: NativeClient,
@@ -14,13 +16,11 @@ pub struct Client {
 
 impl Client {
     pub fn new() -> Self {
-        let client = NativeClient::new();
-        let base = BASE_URL.into();
-        Client { client, base }
+        Client::default()
     }
 
     #[allow(unused_variables)]
-    fn get_url(&self, path: &str, modifiers: Option<HashMap<String, String>>) -> http::Uri {
+    fn get_url(&self, path: &str, modifiers: Option<HashMap<&str, String>>) -> http::Uri {
         let uri = format!("{}/{}", self.base, path);
         uri.parse::<Uri>().unwrap()
     }
@@ -36,7 +36,7 @@ impl Client {
             .client
             .send(request)
             .await
-            .context("Failed to get teams")?;
+            .context("Failed to get request")?;
 
         let mut body = res.into_body();
         let mut bytes = Vec::new();
@@ -75,8 +75,11 @@ impl Client {
         bail!("Failed to get team response.")
     }
 
-    pub async fn get_todays_schedule(&self) -> Result<Schedule, Error> {
-        let url = self.get_url("schedule", None);
+    pub async fn get_schedule_for(&self, date: chrono::NaiveDate) -> Result<Schedule, Error> {
+        let mut modifiers = HashMap::new();
+        modifiers.insert("date", date.format("%Y-%m-%d").to_string());
+
+        let url = self.get_url("schedule", Some(modifiers));
         let response_type = ResponseType::ScheduleResponse;
 
         let _response = self.get(url, response_type).await?;
@@ -89,5 +92,37 @@ impl Client {
             return Ok(schedule);
         }
         bail!("Failed to get schedule response.")
+    }
+
+    pub async fn get_game_content(&self, game_pk: u64) -> Result<GameContentResponse, Error> {
+        let url = self.get_url(&format!("game/{}/content", game_pk), None);
+        let response_type = ResponseType::GameContentResponse;
+
+        let _response = self.get(url, response_type).await?;
+
+        if let Response::GameContentResponse(Some(response)) = _response {
+            return Ok(response);
+        }
+        bail!("Failed to get game content.")
+    }
+
+    pub async fn get_game_linescore(&self, game_pk: u64) -> Result<GameLinescoreResponse, Error> {
+        let url = self.get_url(&format!("game/{}/linescore", game_pk), None);
+        let response_type = ResponseType::GameLinescoreResponse;
+
+        let _response = self.get(url, response_type).await?;
+
+        if let Response::GameLinescoreResponse(Some(response)) = _response {
+            return Ok(response);
+        }
+        bail!("Failed to get game content.")
+    }
+}
+
+impl Default for Client {
+    fn default() -> Self {
+        let client = NativeClient::new();
+        let base = BASE_URL.into();
+        Client { client, base }
     }
 }
