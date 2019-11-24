@@ -1,6 +1,6 @@
 use crate::config::AppConfig;
 use async_std::task;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, NaiveTime, Utc};
 use failure::{bail, format_err, Error};
 use futures::future;
 use log::{error, info, warn};
@@ -98,13 +98,17 @@ struct Game {
     stats_client: stats_api::Client,
     twil_client: twilio::Client,
     twil_from: String,
+    earliest_notification: chrono::NaiveTime,
     game_id: u64,
+    game_type: String,
     date: DateTime<Utc>,
-    home_team: stats_api::model::ScheduleGameTeam,
-    away_team: stats_api::model::ScheduleGameTeam,
-    scoring_event_ids: Vec<u32>,
+    home_team: stats_api::model::Team,
+    away_team: stats_api::model::Team,
+    score: GameScore,
+    goals: Vec<Goal>,
     subscriptions: Vec<String>,
     preview: Option<stats_api::model::GameContentEditorialItemArticle>,
+    status: GameStatus,
 }
 
 impl Game {
@@ -121,24 +125,31 @@ impl Game {
         );
         let twil_from = config.twilio.from.clone();
 
+        let earliest_notification = config.earliest_notification_time;
+
         let game_id = game.game_pk;
         let date = game.date;
-        let home_team = game.teams.home;
-        let away_team = game.teams.away;
 
-        let scoring_event_ids = vec![];
+        let home_team = stats_client.get_team(game.teams.home.detail.id).await?;
+        let away_team = stats_client.get_team(game.teams.away.detail.id).await?;
+
+        let goals = vec![];
 
         Ok(Game {
             stats_client,
             twil_client,
             twil_from,
+            earliest_notification,
             game_id,
+            game_type: game.game_type,
             date,
             home_team,
             away_team,
-            scoring_event_ids,
+            score: GameScore::new(),
+            goals,
             subscriptions,
             preview: None,
+            status: GameStatus::Scheduled,
         })
     }
 
@@ -156,6 +167,24 @@ impl Game {
 
     fn log_warn<S: std::fmt::Display>(&self, msg: S) {
         warn!("Game({}) - {}", self.game_id, msg);
+    }
+
+    async fn get_milestones(&mut self) -> Result<stats_api::model::GameContentMilestones, Error> {
+        let content = self.stats_client.get_game_content(self.game_id).await?;
+        let milestones = content.media.milestones;
+        Ok(milestones)
+    }
+
+    async fn get_milestone_items(
+        &mut self,
+    ) -> Result<Vec<stats_api::model::GameContentMilestoneItem>, Error> {
+        let milestones = self.get_milestones().await?;
+
+        if let Some(items) = milestones.items {
+            Ok(items)
+        } else {
+            bail!("No milestone items yet");
+        }
     }
 
     async fn get_preview(&mut self) -> Result<(), Error> {
@@ -178,81 +207,355 @@ impl Game {
         String::from("")
     }
 
-    async fn send_message(&self, number: &str, message: &str) -> Result<(), Error> {
-        let _response = self
-            .twil_client
-            .send_message(self.twil_from.as_str(), number, message)
-            .await;
-        match _response {
-            Ok(response) => {
-                if response.status == "sent" || response.status == "queued" {
-                    return Ok(());
+    async fn send_message(&self, message: &str) {
+        for number in self.subscriptions.iter() {
+            let _response = self
+                .twil_client
+                .send_message(self.twil_from.as_str(), number, message)
+                .await;
+
+            match _response {
+                Ok(response) => {
+                    if response.status == "sent" || response.status == "queued" {
+                        self.log_info(format!("Notification sent for: {}", number));
+                    } else {
+                        self.log_error(format!("Notification couldn't send for: {}", number));
+                    }
                 }
-                bail!(format_err!(
-                    "Failure sending message, response was: {:?}",
-                    response
-                ));
+                Err(e) => self.log_error(format_err!("Failure sending message, error: {:?}", e)),
             }
-            Err(e) => bail!(format_err!("Failure sending message, error: {:?}", e)),
         }
     }
 
-    async fn send_preview_notification(&self) -> Result<(), Error> {
+    async fn send_preview_notification(&self) {
         let notification = format!(
             "{} @ {} - {}\n\
              \n\
              {}",
-            self.home_team.detail.name,
-            self.away_team.detail.name,
+            self.home_team.name,
+            self.away_team.name,
             self.local_datetime().format("%I:%M:%S %p"),
             self.subhead(),
         );
 
-        for number in self.subscriptions.iter() {
-            if let Err(e) = self.send_message(&number, &notification).await {
-                return Err(e);
+        self.send_message(&notification).await;
+    }
+
+    #[allow(clippy::ptr_arg)]
+    fn check_end(&self, milestone_items: &Vec<stats_api::model::GameContentMilestoneItem>) -> bool {
+        for item in milestone_items {
+            if item.r#type == "BROADCAST_END" {
+                return true;
             }
-            self.log_info(format!("Preview notification sent for: {}", number));
+        }
+        false
+    }
+
+    #[allow(clippy::ptr_arg)]
+    fn parse_goals(
+        &mut self,
+        milestone_items: &Vec<stats_api::model::GameContentMilestoneItem>,
+    ) -> Vec<Goal> {
+        let mut goals = vec![];
+        for item in milestone_items {
+            if item.r#type == "GOAL" {
+                let event_id = item.stats_event_id.parse::<u32>().ok();
+                let team_id = item.team_id.parse::<u32>().ok();
+                let period_time =
+                    NaiveTime::parse_from_str(&format!("00:{}", item.period_time), "%H:%M:%S").ok();
+
+                if event_id.is_none() || team_id.is_none() || period_time.is_none() {
+                    self.log_error("Could not parse goal milestone items.");
+                    continue;
+                }
+
+                let time = {
+                    match self.game_type.as_str() {
+                        "P" => 20,
+                        _ => match item.ordinal_num.as_str() {
+                            "OT" => 5,
+                            "SO" => 0,
+                            _ => 20,
+                        },
+                    }
+                };
+
+                let period_time = NaiveTime::from_hms(0, 0, 0)
+                    + (NaiveTime::from_hms(0, time, 0) - period_time.unwrap());
+
+                let goal = Goal {
+                    event_id: event_id.unwrap(),
+                    team_id: team_id.unwrap(),
+                    description: item.description.clone(),
+                    ordinal_num: item.ordinal_num.clone(),
+                    period_time,
+                    highlight: item.highlight.clone(),
+                };
+
+                goals.push(goal);
+            }
         }
 
-        Ok(())
+        goals
+    }
+
+    async fn process_goals(&mut self, goals: Vec<Goal>) {
+        if goals.is_empty() {
+            return;
+        }
+
+        // Add any goals that don't yet exist in stored goals. We will need to add these
+        // to the score.
+        let goals_to_add: Vec<Goal> = goals
+            .clone()
+            .into_iter()
+            .filter(|goal| {
+                for stored_goal in self.goals.iter() {
+                    if goal.event_id == stored_goal.event_id {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect();
+
+        // Remove any goals that no longer exist (goal is overturned). We will need
+        // to deduct these back from the score.
+        let goals_to_remove: Vec<Goal> = self
+            .goals
+            .iter()
+            .filter_map(|stored_goal| {
+                let mut count = 0;
+                for goal in goals.iter() {
+                    if stored_goal.event_id == goal.event_id {
+                        count += 1;
+                    }
+                }
+
+                if count == 0 {
+                    Some(stored_goal.clone())
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for goal in goals_to_add {
+            self.add_goal_score(&goal);
+            self.notify_goal(&goal).await;
+
+            self.goals.push(goal);
+        }
+
+        for goal in goals_to_remove {
+            self.deduct_goal_score(&goal);
+
+            // Remove the goal from stored goals
+            for (idx, stored_goal) in self.goals.clone().iter().enumerate() {
+                if stored_goal.event_id == goal.event_id {
+                    self.goals.remove(idx);
+                }
+            }
+        }
+    }
+
+    fn add_goal_score(&mut self, goal: &Goal) {
+        let scoring_team = goal.team_id;
+        if scoring_team == self.home_team.id {
+            self.score.home += 1;
+        } else {
+            self.score.away += 1;
+        }
+    }
+
+    fn deduct_goal_score(&mut self, goal: &Goal) {
+        let scoring_team = goal.team_id;
+        if scoring_team == self.home_team.id {
+            self.score.home -= 1;
+        } else {
+            self.score.away -= 1;
+        }
+    }
+
+    async fn notify_goal(&self, goal: &Goal) {
+        let scoring_team_name = if goal.team_id == self.home_team.id {
+            &self.home_team.name
+        } else {
+            &self.away_team.name
+        };
+
+        let message = format!(
+            "{} score\n\
+             \n\
+             {} {}, {} {} - {} {}\n\
+             \n\
+             {}",
+            scoring_team_name,
+            goal.period_time.format("%M:%S"),
+            goal.ordinal_num,
+            self.home_team.abbreviation,
+            self.score.home,
+            self.away_team.abbreviation,
+            self.score.away,
+            goal.description
+        );
+
+        self.send_message(&message).await;
+
+        self.log_info(format!(
+            "{} score, {} {}, {} {} - {} {}, {}",
+            scoring_team_name,
+            goal.period_time.format("%M:%S"),
+            goal.ordinal_num,
+            self.home_team.abbreviation,
+            self.score.home,
+            self.away_team.abbreviation,
+            self.score.away,
+            goal.description
+        ));
     }
 
     async fn run(&mut self) {
         info!(
             "Running Game({}) - {} vs. {} @ {}...",
             self.game_id,
-            self.home_team.detail.name,
-            self.away_team.detail.name,
+            self.home_team.name,
+            self.away_team.name,
             self.local_datetime().to_rfc2822()
         );
 
-        while let Err(e) = self.get_preview().await {
-            self.log_warn(e);
-            task::sleep(Duration::from_secs(10 * 60)).await;
+        loop {
+            match self.status {
+                GameStatus::Scheduled => {
+                    self.run_scheduled_game().await;
+                    task::sleep(Duration::from_secs(60 * 10)).await;
+                }
+                GameStatus::Live => {
+                    self.run_live_game().await;
+                    task::sleep(Duration::from_secs(10)).await;
+                }
+                GameStatus::Ended => break,
+            }
         }
-        self.log_info(format!("Got preview: {}", self.subhead()));
 
-        if let Err(e) = self.send_preview_notification().await {
-            self.log_error(e);
+        let winning_team_name = if self.score.home > self.score.away {
+            self.home_team.name.clone()
+        } else {
+            self.away_team.name.clone()
         };
+
+        let message = format!(
+            "{} win\n\nFinal score: {} {} - {} {}",
+            winning_team_name,
+            self.home_team.abbreviation,
+            self.score.home,
+            self.away_team.abbreviation,
+            self.score.away
+        );
+
+        self.send_message(&message).await;
+
+        self.log_info(format!(
+            "{} win. Final score: {} {} - {} {}",
+            winning_team_name,
+            self.home_team.abbreviation,
+            self.score.home,
+            self.away_team.abbreviation,
+            self.score.away
+        ));
+    }
+
+    async fn run_scheduled_game(&mut self) {
+        // Don't try to get preview until earliest notification time.
+        if Local::now().time() < self.earliest_notification {
+            self.log_info("Before notification time, sleeping...");
+            return;
+        }
+
+        // Once preview is sent, then move on to checking if game has started
+        if self.preview.is_none() {
+            // After time is passed, try to get preview. Don't proceed until
+            // preview article is fetched.
+            if let Err(e) = self.get_preview().await {
+                self.log_warn(e);
+                return;
+            }
+
+            // Now that preview is fetched, send out notification
+            self.log_info(format!("Got preview: {}", self.subhead()));
+            self.send_preview_notification().await;
+        } else {
+            // Check stream start time in milestone struct, if populated, game
+            // has started. Change game to Live which will progress game forward.
+            let milestones = self.get_milestones().await;
+            match milestones {
+                Err(e) => self.log_error(e),
+                Ok(milestones) => {
+                    if milestones.stream_start.is_some() {
+                        self.status = GameStatus::Live
+                    } else {
+                        self.log_info("Game hasn't started yet, sleeping...");
+                    }
+                }
+            }
+        }
+    }
+
+    async fn run_live_game(&mut self) {
+        if let Ok(items) = self.get_milestone_items().await {
+            let goals = self.parse_goals(&items);
+
+            self.process_goals(goals).await;
+
+            if self.check_end(&items) {
+                self.status = GameStatus::Ended;
+            }
+        }
     }
 }
 
 fn log_words<'a, T>(vec: &[T]) -> (&'a str, &'a str) {
     let verb = {
-        if vec.len() > 1 {
+        if vec.len() != 1 {
             "are"
         } else {
             "is"
         }
     };
     let plural = {
-        if vec.len() > 1 {
+        if vec.len() != 1 {
             "s"
         } else {
             ""
         }
     };
     (verb, plural)
+}
+
+#[derive(PartialEq)]
+enum GameStatus {
+    Scheduled,
+    Live,
+    Ended,
+}
+
+struct GameScore {
+    home: u8,
+    away: u8,
+}
+
+impl GameScore {
+    fn new() -> Self {
+        GameScore { home: 0, away: 0 }
+    }
+}
+
+#[derive(Clone)]
+struct Goal {
+    event_id: u32,
+    team_id: u32,
+    description: String,
+    ordinal_num: String,
+    period_time: NaiveTime,
+    highlight: Option<stats_api::model::GameContentMilestoneItemHighlight>,
 }

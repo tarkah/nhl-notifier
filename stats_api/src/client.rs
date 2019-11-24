@@ -19,10 +19,15 @@ impl Client {
         Client::default()
     }
 
-    #[allow(unused_variables)]
-    fn get_url(&self, path: &str, modifiers: Option<HashMap<&str, String>>) -> http::Uri {
-        let uri = format!("{}/{}", self.base, path);
-        uri.parse::<Uri>().unwrap()
+    fn get_url(&self, path: &str, params: Option<HashMap<&str, String>>) -> http::Uri {
+        if let Some(params) = params {
+            let params = serde_urlencoded::to_string(params).unwrap_or_else(|_| String::from(""));
+            let uri = format!("{}/{}?{}", self.base, path, params);
+            uri.parse::<Uri>().unwrap()
+        } else {
+            let uri = format!("{}/{}", self.base, path);
+            uri.parse::<Uri>().unwrap()
+        }
     }
 
     async fn get(&self, url: Uri, response_type: ResponseType) -> Result<Response, Error> {

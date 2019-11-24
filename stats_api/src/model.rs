@@ -164,11 +164,12 @@ pub struct GameContentMilestones {
 }
 
 #[serde(rename_all = "camelCase")]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GameContentMilestoneItem {
     pub description: String,
     pub r#type: String,
     pub period: String,
+    pub period_time: String,
     pub ordinal_num: String,
     pub team_id: String,
     pub stats_event_id: String,
@@ -177,7 +178,7 @@ pub struct GameContentMilestoneItem {
 }
 
 #[serde(rename_all = "camelCase")]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GameContentMilestoneItemHighlight {
     pub title: String,
     pub blurb: String,
@@ -186,7 +187,7 @@ pub struct GameContentMilestoneItemHighlight {
 }
 
 #[serde(rename_all = "camelCase")]
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct GameContentMilestoneItemHighlightPlayback {
     pub name: String,
     pub url: String,

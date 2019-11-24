@@ -1,5 +1,5 @@
 use crate::model::{CreateMessageRequest, CreateMessageResponse, Response, ResponseType};
-use failure::{bail, format_err, Error, ResultExt};
+use failure::{bail, Error, ResultExt};
 use futures::AsyncReadExt;
 use http::{Request, Uri};
 use http_client::{native::NativeClient, Body, HttpClient};
@@ -9,7 +9,6 @@ pub struct Client {
     client: NativeClient,
     base: String,
     account_sid: String,
-    auth_token: String,
 }
 
 impl Client {
@@ -23,14 +22,18 @@ impl Client {
             client,
             base,
             account_sid,
-            auth_token,
         }
     }
 
-    #[allow(unused_variables)]
-    fn get_url(&self, path: &str, modifiers: Option<HashMap<&str, String>>) -> http::Uri {
-        let uri = format!("{}/{}", self.base, path);
-        uri.parse::<Uri>().unwrap()
+    fn get_url(&self, path: &str, params: Option<HashMap<&str, String>>) -> http::Uri {
+        if let Some(params) = params {
+            let params = serde_urlencoded::to_string(params).unwrap_or_else(|_| String::from(""));
+            let uri = format!("{}/{}?{}", self.base, path, params);
+            uri.parse::<Uri>().unwrap()
+        } else {
+            let uri = format!("{}/{}", self.base, path);
+            uri.parse::<Uri>().unwrap()
+        }
     }
 
     async fn post(
