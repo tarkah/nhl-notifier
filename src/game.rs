@@ -379,9 +379,9 @@ impl Game {
 
     async fn notify_goal(&self, goal: &Goal) {
         let scoring_team_name = if goal.team_id == self.home_team.id {
-            &self.home_team.name
+            &self.home_team.team_name
         } else {
-            &self.away_team.name
+            &self.away_team.team_name
         };
 
         let message = format!(
@@ -439,9 +439,9 @@ impl Game {
         }
 
         let winning_team_name = if self.score.home > self.score.away {
-            self.home_team.name.clone()
+            self.home_team.team_name.clone()
         } else {
-            self.away_team.name.clone()
+            self.away_team.team_name.clone()
         };
 
         let message = format!(
