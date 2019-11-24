@@ -1,0 +1,10 @@
+[Unit] 
+Description=Timer for nhl-notifier
+
+[Timer] 
+OnCalendar=*-*-* 07:00:00
+Unit=nhl-notifier@%i.service
+Persistent=false
+
+[Install] 
+WantedBy=multi-user.target

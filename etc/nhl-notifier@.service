@@ -1,0 +1,12 @@
+[Unit]
+Description=nhl-notifier
+After=network.target
+
+[Service]
+Type=simple
+User=%i
+Group=%i
+ExecStart=/home/%i/.cargo/bin/nhl-notifier run -c /home/%i/.config/nhl-notifier/config.yml
+
+[Install] 
+WantedBy=multi-user.target
