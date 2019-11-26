@@ -386,8 +386,6 @@ impl Game {
             goal.description
         );
 
-        self.send_message(&message).await;
-
         self.log_info(format!(
             "{} score, {} {}, {} {} - {} {}, {}",
             scoring_team_name,
@@ -399,6 +397,8 @@ impl Game {
             self.score.away,
             goal.description
         ));
+
+        self.send_message(&message).await;
     }
 
     async fn process_highlights(&mut self, goals: &HashMap<u32, Goal>) {
@@ -447,12 +447,12 @@ impl Game {
                     highlight.description, clip.url
                 );
 
-                self.send_message(&message).await;
-
                 self.log_info(format!(
                     "Highlight, {}, {}",
                     highlight.description, clip.url
                 ));
+
+                self.send_message(&message).await;
 
                 return Ok(());
             }
@@ -498,8 +498,6 @@ impl Game {
             self.score.away
         );
 
-        self.send_message(&message).await;
-
         self.log_info(format!(
             "{} win. Final score: {} {} - {} {}",
             winning_team_name,
@@ -508,6 +506,8 @@ impl Game {
             self.away_team.abbreviation,
             self.score.away
         ));
+
+        self.send_message(&message).await;
     }
 
     async fn run_scheduled_game(&mut self) {
