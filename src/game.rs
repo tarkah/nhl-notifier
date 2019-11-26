@@ -97,7 +97,6 @@ pub async fn run_todays_games(config: &AppConfig) -> Result<(), Error> {
     Ok(())
 }
 
-#[allow(dead_code)]
 struct Game {
     stats_client: stats_api::Client,
     twil_client: twilio::Client,
