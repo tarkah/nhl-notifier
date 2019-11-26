@@ -242,8 +242,7 @@ impl Game {
         self.send_message(&notification).await;
     }
 
-    #[allow(clippy::ptr_arg)]
-    fn check_end(&self, milestone_items: &Vec<GameContentMilestoneItem>) -> bool {
+    fn check_end(&self, milestone_items: Vec<GameContentMilestoneItem>) -> bool {
         for item in milestone_items {
             if item.r#type == "BROADCAST_END" {
                 return true;
@@ -252,13 +251,12 @@ impl Game {
         false
     }
 
-    #[allow(clippy::ptr_arg)]
     fn parse_goals(
         &mut self,
-        milestone_items: &Vec<GameContentMilestoneItem>,
+        milestone_items: Vec<GameContentMilestoneItem>,
     ) -> HashMap<u32, Goal> {
         let mut goals = HashMap::new();
-        for item in milestone_items {
+        for item in milestone_items.to_owned() {
             if item.r#type == "GOAL" {
                 let event_id = item.stats_event_id.parse::<u32>().ok();
                 let team_id = item.team_id.parse::<u32>().ok();
@@ -287,10 +285,10 @@ impl Game {
                 let goal = Goal {
                     event_id: event_id.unwrap(),
                     team_id: team_id.unwrap(),
-                    description: item.description.clone(),
-                    ordinal_num: item.ordinal_num.clone(),
+                    description: item.description,
+                    ordinal_num: item.ordinal_num,
                     period_time,
-                    highlight: item.highlight.clone(),
+                    highlight: item.highlight,
                 };
 
                 goals.insert(goal.event_id, goal);
@@ -550,12 +548,12 @@ impl Game {
 
     async fn run_live_game(&mut self) {
         if let Ok(items) = self.get_milestone_items().await {
-            let goals = self.parse_goals(&items);
+            let goals = self.parse_goals(items.clone());
 
             self.process_goals(&goals).await;
             self.process_highlights(&goals).await;
 
-            if self.check_end(&items) {
+            if self.check_end(items) {
                 self.status = GameStatus::Ended;
             }
         }
