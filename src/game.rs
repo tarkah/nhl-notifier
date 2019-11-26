@@ -4,7 +4,11 @@ use chrono::{DateTime, Local, NaiveTime, Utc};
 use failure::{bail, format_err, Error};
 use futures::future;
 use log::{error, info, warn};
-use std::time::Duration;
+use stats_api::model::{
+    GameContentEditorialItemArticle, GameContentMilestoneItem, GameContentMilestoneItemHighlight,
+    GameContentMilestones, ScheduleGame, Team,
+};
+use std::{collections::HashMap, time::Duration};
 
 pub async fn run_todays_games(config: &AppConfig) -> Result<(), Error> {
     let client = stats_api::Client::new();
@@ -32,7 +36,7 @@ pub async fn run_todays_games(config: &AppConfig) -> Result<(), Error> {
         plural,
     );
 
-    let games_to_notify: Vec<(stats_api::model::ScheduleGame, Vec<String>)> = todays_schedule
+    let games_to_notify: Vec<(ScheduleGame, Vec<String>)> = todays_schedule
         .games
         .into_iter()
         .filter_map(|game| {
@@ -102,18 +106,19 @@ struct Game {
     game_id: u64,
     game_type: String,
     date: DateTime<Utc>,
-    home_team: stats_api::model::Team,
-    away_team: stats_api::model::Team,
+    home_team: Team,
+    away_team: Team,
     score: GameScore,
-    goals: Vec<Goal>,
+    goals: HashMap<u32, Goal>,
+    highlights_notified: Vec<u32>,
     subscriptions: Vec<String>,
-    preview: Option<stats_api::model::GameContentEditorialItemArticle>,
+    preview: Option<GameContentEditorialItemArticle>,
     status: GameStatus,
 }
 
 impl Game {
     async fn new(
-        game: stats_api::model::ScheduleGame,
+        game: ScheduleGame,
         subscriptions: Vec<String>,
         config: &AppConfig,
     ) -> Result<Self, Error> {
@@ -133,8 +138,6 @@ impl Game {
         let home_team = stats_client.get_team(game.teams.home.detail.id).await?;
         let away_team = stats_client.get_team(game.teams.away.detail.id).await?;
 
-        let goals = vec![];
-
         Ok(Game {
             stats_client,
             twil_client,
@@ -146,7 +149,8 @@ impl Game {
             home_team,
             away_team,
             score: GameScore::new(),
-            goals,
+            goals: HashMap::new(),
+            highlights_notified: vec![],
             subscriptions,
             preview: None,
             status: GameStatus::Scheduled,
@@ -169,15 +173,13 @@ impl Game {
         warn!("Game({}) - {}", self.game_id, msg);
     }
 
-    async fn get_milestones(&mut self) -> Result<stats_api::model::GameContentMilestones, Error> {
+    async fn get_milestones(&mut self) -> Result<GameContentMilestones, Error> {
         let content = self.stats_client.get_game_content(self.game_id).await?;
         let milestones = content.media.milestones;
         Ok(milestones)
     }
 
-    async fn get_milestone_items(
-        &mut self,
-    ) -> Result<Vec<stats_api::model::GameContentMilestoneItem>, Error> {
+    async fn get_milestone_items(&mut self) -> Result<Vec<GameContentMilestoneItem>, Error> {
         let milestones = self.get_milestones().await?;
 
         if let Some(items) = milestones.items {
@@ -242,7 +244,7 @@ impl Game {
     }
 
     #[allow(clippy::ptr_arg)]
-    fn check_end(&self, milestone_items: &Vec<stats_api::model::GameContentMilestoneItem>) -> bool {
+    fn check_end(&self, milestone_items: &Vec<GameContentMilestoneItem>) -> bool {
         for item in milestone_items {
             if item.r#type == "BROADCAST_END" {
                 return true;
@@ -254,9 +256,9 @@ impl Game {
     #[allow(clippy::ptr_arg)]
     fn parse_goals(
         &mut self,
-        milestone_items: &Vec<stats_api::model::GameContentMilestoneItem>,
-    ) -> Vec<Goal> {
-        let mut goals = vec![];
+        milestone_items: &Vec<GameContentMilestoneItem>,
+    ) -> HashMap<u32, Goal> {
+        let mut goals = HashMap::new();
         for item in milestone_items {
             if item.r#type == "GOAL" {
                 let event_id = item.stats_event_id.parse::<u32>().ok();
@@ -292,28 +294,26 @@ impl Game {
                     highlight: item.highlight.clone(),
                 };
 
-                goals.push(goal);
+                goals.insert(goal.event_id, goal);
             }
         }
 
         goals
     }
 
-    async fn process_goals(&mut self, goals: Vec<Goal>) {
+    async fn process_goals(&mut self, goals: &HashMap<u32, Goal>) {
         if goals.is_empty() {
             return;
         }
 
         // Add any goals that don't yet exist in stored goals. We will need to add these
         // to the score.
-        let goals_to_add: Vec<Goal> = goals
+        let goals_to_add: HashMap<u32, Goal> = goals
             .clone()
             .into_iter()
-            .filter(|goal| {
-                for stored_goal in self.goals.iter() {
-                    if goal.event_id == stored_goal.event_id {
-                        return false;
-                    }
+            .filter(|(id, _)| {
+                if self.goals.contains_key(&id) {
+                    return false;
                 }
                 true
             })
@@ -321,41 +321,30 @@ impl Game {
 
         // Remove any goals that no longer exist (goal is overturned). We will need
         // to deduct these back from the score.
-        let goals_to_remove: Vec<Goal> = self
+        let goals_to_remove: HashMap<u32, Goal> = self
             .goals
             .iter()
-            .filter_map(|stored_goal| {
-                let mut count = 0;
-                for goal in goals.iter() {
-                    if stored_goal.event_id == goal.event_id {
-                        count += 1;
-                    }
-                }
-
-                if count == 0 {
-                    Some(stored_goal.clone())
-                } else {
+            .filter_map(|(id, stored_goal)| {
+                if goals.contains_key(id) {
                     None
+                } else {
+                    Some((*id, stored_goal.clone()))
                 }
             })
             .collect();
 
-        for goal in goals_to_add {
+        for (id, goal) in goals_to_add {
             self.add_goal_score(&goal);
             self.notify_goal(&goal).await;
 
-            self.goals.push(goal);
+            self.goals.insert(id, goal);
         }
 
-        for goal in goals_to_remove {
+        for (id, goal) in goals_to_remove {
             self.deduct_goal_score(&goal);
 
             // Remove the goal from stored goals
-            for (idx, stored_goal) in self.goals.clone().iter().enumerate() {
-                if stored_goal.event_id == goal.event_id {
-                    self.goals.remove(idx);
-                }
-            }
+            self.goals.remove(&id);
         }
     }
 
@@ -413,6 +402,65 @@ impl Game {
             self.score.away,
             goal.description
         ));
+    }
+
+    async fn process_highlights(&mut self, goals: &HashMap<u32, Goal>) {
+        let highlights: HashMap<u32, GameContentMilestoneItemHighlight> = goals
+            .clone()
+            .into_iter()
+            .filter_map(|(id, goal)| {
+                if let Some(highlight) = goal.highlight {
+                    Some((id, highlight))
+                } else {
+                    None
+                }
+            })
+            .collect();
+
+        for (id, highlight) in highlights {
+            if !self.highlights_notified.contains(&id) {
+                if let Err(e) = self.notify_highlight(highlight).await {
+                    self.log_error(e);
+                    return;
+                };
+                self.highlights_notified.push(id);
+            }
+        }
+    }
+
+    async fn notify_highlight(
+        &self,
+        highlight: GameContentMilestoneItemHighlight,
+    ) -> Result<(), Error> {
+        if let Some(playback) = highlight.playbacks {
+            let mut clip_1800k = None;
+            for clip in playback {
+                if clip.name == "FLASH_1800K_896x504" {
+                    clip_1800k = Some(clip)
+                }
+            }
+
+            if let Some(clip) = clip_1800k {
+                let message = format!(
+                    "Highlight\n\
+                     \n\
+                     {}\n\
+                     \n\
+                     {}",
+                    highlight.description, clip.url
+                );
+
+                self.send_message(&message).await;
+
+                self.log_info(format!(
+                    "Highlight, {}, {}",
+                    highlight.description, clip.url
+                ));
+
+                return Ok(());
+            }
+        };
+        bail!("No playback clip available");
     }
 
     async fn run(&mut self) {
@@ -505,7 +553,8 @@ impl Game {
         if let Ok(items) = self.get_milestone_items().await {
             let goals = self.parse_goals(&items);
 
-            self.process_goals(goals).await;
+            self.process_goals(&goals).await;
+            self.process_highlights(&goals).await;
 
             if self.check_end(&items) {
                 self.status = GameStatus::Ended;
@@ -557,5 +606,5 @@ struct Goal {
     description: String,
     ordinal_num: String,
     period_time: NaiveTime,
-    highlight: Option<stats_api::model::GameContentMilestoneItemHighlight>,
+    highlight: Option<GameContentMilestoneItemHighlight>,
 }
