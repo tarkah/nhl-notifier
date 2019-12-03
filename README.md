@@ -1,4 +1,5 @@
 # NHL Notifier
+[![Build Status](https://dev.azure.com/tarkah/nhl-notifier/_apis/build/status/tarkah.nhl-notifier?branchName=master)](https://dev.azure.com/tarkah/nhl-notifier/_build/latest?definitionId=1&branchName=master)
 
 Get live game updates via SMS for your favorite NHL team
 
