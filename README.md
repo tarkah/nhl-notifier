@@ -36,27 +36,35 @@ SUBCOMMANDS:
 ```
 
 ```
-[2019-11-24T22:00:18Z INFO  nhl_notifier::config] Using config file: "./config.yml"
-[2019-11-24T22:00:18Z INFO  nhl_notifier::game] There are 13 games today, Tuesday, 19 November, 2019
-[2019-11-24T22:00:18Z INFO  nhl_notifier::game] There is 1 team with an active subscription
-[2019-11-24T22:00:18Z INFO  nhl_notifier::game] There is 1 subscribable game
-[2019-11-24T22:00:18Z INFO  nhl_notifier::game] Running Game(2019020329) - Vegas Golden Knights vs. Toronto Maple Leafs @ Tue, 19 Nov 2019 19:00:00 -0800...
-[2019-11-24T22:00:18Z INFO  nhl_notifier::game] Game(2019020329) - Got preview: Vegas goalie Fleury eyes NHL win No. 450; Toronto 0-4-1 in past five
-[2019-11-24T22:00:19Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:21Z INFO  nhl_notifier::game] Game(2019020329) - Golden Knights score, 11:53 2nd, VGK 1 - TOR 0, Cody Glass (4) Wrist Shot, assists: Max Pacioretty (13), Nate Schmidt (6)
-[2019-11-24T22:00:21Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:21Z INFO  nhl_notifier::game] Game(2019020329) - Maple Leafs score, 12:34 3rd, VGK 1 - TOR 1, Jason Spezza (3) Wrist Shot, assists: Ilya Mikheyev (8)
-[2019-11-24T22:00:21Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Golden Knights score, 11:53 3rd, VGK 2 - TOR 1, Tomas Nosek (4) Backhand, assists: none
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Golden Knights score, 09:38 3rd, VGK 3 - TOR 1, Mark Stone (10) Wrist Shot, assists: Cody Glass (5), Shea Theodore (9)
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Maple Leafs score, 07:13 3rd, VGK 3 - TOR 2, Zach Hyman (1) Snap Shot, assists: Jason Spezza (4), Tyson Barrie (7)
-[2019-11-24T22:00:22Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:23Z INFO  nhl_notifier::game] Game(2019020329) - Golden Knights score, 00:21 3rd, VGK 4 - TOR 2, Cody Eakin (2) Wrist Shot, assists: Max Pacioretty (14), Jonathan Marchessault (11)
-[2019-11-24T22:00:23Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
-[2019-11-24T22:00:33Z INFO  nhl_notifier::game] Game(2019020329) - Golden Knights win. Final score: VGK 4 - TOR 2
-[2019-11-24T22:00:33Z INFO  nhl_notifier::game] Game(2019020329) - Notification sent for: +15555555555
+[2019-12-02T18:00:10Z INFO  nhl_notifier::config] Using config file: "/home/tarkah/.config/nhl-notifier/config.yml"
+[2019-12-02T18:00:10Z INFO  nhl_notifier::game] There are 5 games today, Monday, 2 December, 2019
+[2019-12-02T18:00:10Z INFO  nhl_notifier::game] There is 1 team with an active subscription
+[2019-12-02T18:00:10Z INFO  nhl_notifier::game] There is 1 subscribable game
+[2019-12-02T18:00:10Z INFO  nhl_notifier::game] Running Game(2019020420) - New York Rangers vs. Vegas Golden Knights @ Mon, 02 Dec 2019 16:00:00 -0800...
+[2019-12-02T19:00:12Z INFO  nhl_notifier::game] Game(2019020420) - Got preview: New York eyes point in six straight games; Vegas has won past two
+[2019-12-02T19:00:12Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T00:20:20Z INFO  nhl_notifier::game] Game(2019020420) - Golden Knights score, 18:26 1st, NYR 0 - VGK 1, Alex Tuch (3) Wrist Shot, assists: Jonathan Marchessault (13), Brayden McNabb (4)
+[2019-12-03T00:20:20Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T00:20:20Z INFO  nhl_notifier::game] Game(2019020420) - Highlight, Alex Tuch scores against New York Rangers to make it 1-0, https://hlslive-wsczoominwestus.med.nhl.com/publish/31827937-bee0-4c16-a10d-ceb1a392b03f.mp4
+[2019-12-03T00:20:21Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T00:22:11Z INFO  nhl_notifier::game] Game(2019020420) - Golden Knights score, 16:10 1st, NYR 0 - VGK 2, Alex Tuch (4) Tip-In, assists: none
+[2019-12-03T00:22:12Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T00:25:13Z INFO  nhl_notifier::game] Game(2019020420) - Highlight, Alex Tuch scores a power-play goal against New York Rangers to make it 2-0, https://hlslive-wsczoominwestus.med.nhl.com/publish/5b849070-336b-4003-bbe1-ca2a4f10dbe3.mp4
+[2019-12-03T00:25:13Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:13:29Z INFO  nhl_notifier::game] Game(2019020420) - Golden Knights score, 15:16 2nd, NYR 0 - VGK 3, Reilly Smith (12) Backhand, assists: none
+[2019-12-03T01:13:30Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:13:30Z INFO  nhl_notifier::game] Game(2019020420) - Highlight, Reilly Smith scores against New York Rangers to make it 3-0, https://hlslive-wsczoominwestus.med.nhl.com/publish/ae093aaf-f306-4754-97c4-f988e6dbecfa.mp4
+[2019-12-03T01:13:30Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:14:30Z INFO  nhl_notifier::game] Game(2019020420) - Golden Knights score, 13:40 2nd, NYR 0 - VGK 4, Max Pacioretty (10) Snap Shot, assists: none
+[2019-12-03T01:14:31Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:18:32Z INFO  nhl_notifier::game] Game(2019020420) - Highlight, Max Pacioretty scores a power-play goal against New York Rangers to make it 4-0, https://hlslive-wsczoominwestus.med.nhl.com/publish/2aa39d30-f528-4832-908f-af163ffa3ace.mp4
+[2019-12-03T01:18:33Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:30:47Z INFO  nhl_notifier::game] Game(2019020420) - Rangers score, 04:45 2nd, NYR 1 - VGK 4, Brendan Lemieux (4) Tip-In, assists: Jacob Trouba (11), Mika Zibanejad (9)
+[2019-12-03T01:30:48Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T01:34:49Z INFO  nhl_notifier::game] Game(2019020420) - Highlight, Brendan Lemieux scores against Vegas Golden Knights to make it 4-1, https://hlslive-wsczoominwestus.med.nhl.com/publish/f1e4d96e-5b6c-411c-82bb-f95dd2a2a6dd.mp4
+[2019-12-03T01:34:50Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
+[2019-12-03T02:31:19Z INFO  nhl_notifier::game] Game(2019020420) - Golden Knights win. Final score: NYR 1 - VGK 4
+[2019-12-03T02:31:19Z INFO  nhl_notifier::game] Game(2019020420) - Notification sent for: +15555555555
 ```
 
 ## Automatically start with timer
