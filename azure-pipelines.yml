@@ -1,0 +1,125 @@
+trigger:
+  branches:
+    include: ['master', 'azure-pipelines']
+  tags:
+    include: ['*']
+
+jobs:
+  - job: 'Clippy'
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    strategy:
+      matrix:
+        linux-stable:
+          imageName: 'ubuntu-latest'
+          rustup_toolchain: stable
+
+    pool:
+      vmImage: $(imageName)
+
+    steps:
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUSTUP_TOOLCHAIN
+          echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+        displayName: Linux Install Rust
+      - script: rustup component add clippy
+        displayName: Install Clippy
+      - script: cargo clippy --all
+        displayName: Run Clippy
+
+
+  - job: 'Test'    
+    condition: not(startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+    strategy:
+      matrix:
+        linux-stable:
+          imageName: 'ubuntu-latest'
+          rustup_toolchain: stable
+          target: 'x86_64-unknown-linux-gnu'
+
+    pool:
+      vmImage: $(imageName)
+
+    steps:
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUSTUP_TOOLCHAIN
+          echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+        displayName: Linux Install Rust
+      - script: cargo build --all
+        displayName: Cargo Build
+      - script: cargo test --all
+        displayName: Cargo Test
+
+
+  - job: 'Release'
+    timeoutInMinutes: 0
+    condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+    strategy:
+      matrix:
+        linux-stable:
+          imageName: 'ubuntu-latest'
+          rustup_toolchain: stable
+          target: 'x86_64-unknown-linux-gnu'
+          docker: false
+
+    pool:
+      vmImage: $(imageName)
+
+    steps:
+      - bash: |
+          DATE="$(date +%Y-%m-%d)"
+          echo "##vso[task.setvariable variable=build.date]$DATE"
+        displayName: Create Date Variable
+      - bash: |
+          MY_TAG="$(Build.SourceBranch)"
+          MY_TAG=${MY_TAG#refs/tags/}
+          echo $MY_TAG
+          echo "##vso[task.setvariable variable=build.my_tag]$MY_TAG"
+        displayName: Create Tag Variable
+      - script: |
+          curl https://sh.rustup.rs -sSf | sh -s -- -y --default-toolchain $RUSTUP_TOOLCHAIN
+          echo "##vso[task.setvariable variable=PATH;]$PATH:$HOME/.cargo/bin"
+        displayName: Linux Install Rust
+      - script: cargo build --release --all
+        displayName: Cargo Build
+      - script: cargo test --release --all
+        displayName: Cargo Test
+
+      - task: CopyFiles@2
+        displayName: Copy Binary
+        inputs:
+          sourceFolder: '$(Build.SourcesDirectory)'
+          contents: |
+            target/**/release/nhl-notifier
+          targetFolder: '$(Build.BinariesDirectory)/nhl-notifier'
+          flattenFolders: true
+      - task: CopyFiles@2
+        displayName: Copy Assets
+        inputs:
+          sourceFolder: '$(Build.SourcesDirectory)'
+          contents: |
+            README.md
+            LICENSE
+          targetFolder: '$(Build.BinariesDirectory)/nhl-notifier'
+
+      - task: ArchiveFiles@2
+        displayName: Linux Archive
+        inputs:
+          rootFolderOrFile: '$(Build.BinariesDirectory)/nhl-notifier'
+          archiveType: 'tar'
+          tarCompression: 'gz'
+          archiveFile: '$(Build.ArtifactStagingDirectory)/nhl-notifier-$(build.my_tag)-$(TARGET).tar.gz'
+
+      - task: GithubRelease@0
+        displayName: Publish Assets to Github Release
+        condition: succeeded()
+        inputs:
+          gitHubConnection: 'tarkah'
+          repositoryName: 'tarkah/nhl-notifier'
+          action: 'edit'
+          target: '$(build.sourceVersion)'
+          tagSource: 'manual'
+          tag: '$(build.my_tag)'
+          assets: '$(Build.ArtifactStagingDirectory)/*'
+          title: '$(build.my_tag) - $(build.date)'
+          assetUploadMode: 'replace'
+          addChangeLog: false
