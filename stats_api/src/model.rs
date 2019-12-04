@@ -131,6 +131,24 @@ pub struct GameContentResponse {
 #[derive(Debug, Deserialize)]
 pub struct GameContentMedia {
     pub milestones: GameContentMilestones,
+    pub epg: Vec<GameContentEpg>,
+}
+
+#[serde(rename_all = "camelCase")]
+#[derive(Debug, Deserialize)]
+pub struct GameContentEpg {
+    pub title: String,
+    #[serde(deserialize_with = "fail_as_none")]
+    pub items: Option<Vec<GameContentEpgItem>>,
+}
+
+#[serde(rename_all = "camelCase")]
+#[derive(Debug, Deserialize)]
+pub struct GameContentEpgItem {
+    pub media_feed_type: String,
+    pub call_letters: String,
+    pub media_state: String,
+    pub media_playback_id: String,
 }
 
 #[serde(rename_all = "camelCase")]
