@@ -7,7 +7,7 @@ version = "0.1.0"
 [workspace]
 
 [dependencies]
-stats-api = { path = "./stats_api" }
+stats-api = { git = "https://github.com/tarkah/stats-api" }
 twilio = { path = "./twilio" }
 
 failure = "0.1"
